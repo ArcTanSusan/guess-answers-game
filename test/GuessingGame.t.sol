@@ -5,119 +5,186 @@ import {Test, console} from "forge-std/Test.sol";
 import {GuessingGame} from "../src/GuessingGame.sol";
 
 contract GuessingGameTest is Test {
-    GuessingGame game;
-    address admin = address(0x1);
-    address player1 = address(0x2);
-    address player2 = address(0x3);
+    GuessingGame public game;
+    address public admin = makeAddr("admin");
+    address public player1 = makeAddr("player1");
+    address public player2 = makeAddr("player2");
+    address public player3 = makeAddr("player3");
 
     function setUp() public {
-        // Deploy the game contract with the admin address
+        vm.prank(admin);
         game = new GuessingGame(admin);
     }
 
-    function testSignUp() public {
-        // Player signs up
-        vm.prank(player1);
-        game.signUp();
-
-        // Verify player is signed up
-        assertTrue(game.playersMap(player1), "Player 1 should be signed up.");
-        assertEq(game.getPlayersCount(), 1, "Players count should be 1.");
+    // Admin Tests
+    function test_AdminIsSetCorrectly() public view {
+        assertEq(game.admin(), admin);
     }
 
-    function testSignUpDisabled() public {
-        // Disable sign-up
+    function test_OnlyAdminCanDisableSignUp() public {
+        assertTrue(game.isSignUpEnabled());
+        
+        // Non-admin cannot disable signup
+        vm.prank(player1);
+        vm.expectRevert("Only the game host or admin can call this function.");
+        game.disableSignUp();
+        
+        // Admin can disable signup
+        vm.prank(admin);
+        game.disableSignUp();
+        assertFalse(game.isSignUpEnabled());
+    }
+
+    // SignUp Tests
+    function test_SuccessfulSignUp() public {
+        vm.prank(player1);
+        game.signUp("What is 2+2?", "4");
+
+        (uint256 playerId, string memory question, bytes32 answer, uint256 points) = 
+            game.addressToPlayerProfile(player1);
+
+        assertEq(playerId, 1);
+        assertEq(question, "What is 2+2?");
+        assertEq(points, 0);
+        assertTrue(answer != bytes32(0));
+        assertEq(game.playerAddresses(0), player1);
+    }
+
+    function test_CannotSignUpTwice() public {
+        vm.startPrank(player1);
+        game.signUp("Question 1", "Answer 1");
+        
+        vm.expectRevert("You are already signed up.");
+        game.signUp("Question 2", "Answer 2");
+        vm.stopPrank();
+    }
+
+    function test_CannotSignUpWhenDisabled() public {
         vm.prank(admin);
         game.disableSignUp();
 
-        // Attempt to sign up after disabling sign-up
-        vm.prank(player2);
+        vm.prank(player1);
         vm.expectRevert("Sign-up is disabled.");
-        game.signUp();
+        game.signUp("Question", "Answer");
     }
 
-    function testCreateAnswerKey() public {
+    // Guessing Tests
+    function testFuzz_CorrectGuess(string memory question, string memory answer) public {
+        vm.assume(bytes(question).length > 0 && bytes(answer).length > 0);
+        
+        // Player 1 signs up and creates question
+        vm.prank(player1);
+        game.signUp(question, answer);
+
+        // Player 2 signs up
+        vm.prank(player2);
+        game.signUp("Different question", "Different answer");
+
+        // Player 2 correctly guesses Player 1's question
+        vm.prank(player2);
+        game.guessAnswer(1, answer);
+
+        // Verify points were awarded
+        (,,, uint256 points) = game.addressToPlayerProfile(player2);
+        assertEq(points, 1);
+    }
+
+    function test_IncorrectGuess() public {
         // Player 1 signs up
         vm.prank(player1);
-        game.signUp();
+        game.signUp("What is 2+2?", "4");
 
         // Player 2 signs up
         vm.prank(player2);
-        game.signUp();
+        game.signUp("Another question", "answer");
 
-        // Player 1 creates an answer key
-        vm.prank(player1);
-        game.createAnswerKey("Is the sky blue?", true);
-
-        // Player 2 creates an answer key
+        // Player 2 incorrectly guesses Player 1's question
         vm.prank(player2);
-        game.createAnswerKey("Is the ocean blue?", true);
+        game.guessAnswer(1, "5");
 
-        // Verify the questionId mapping for both players
-        assertEq(
-            game.playerIdToQuestionId(player1),
-            0,
-            "Player 1 should have questionId 0."
-        );
-        assertEq(
-            game.playerIdToQuestionId(player2),
-            1,
-            "Player 2 should have questionId 1."
-        );
-
-        // Verify the answers for the questions
-        assertTrue(
-            game.questionIdToAnswer(0, "Is the sky blue?"),
-            "The answer for the question should be true."
-        );
-        assertTrue(
-            game.questionIdToAnswer(1, "Is the ocean blue?"),
-            "The answer for the question should be true."
-        );
+        // Verify no points were awarded
+        (,,, uint256 points) = game.addressToPlayerProfile(player2);
+        assertEq(points, 0);
     }
 
-    function testCreateAnswerKeyMultiple() public {
-        // Player signs up
+    function test_CannotGuessOwnQuestion() public {
         vm.prank(player1);
-        game.signUp();
+        game.signUp("What is 2+2?", "4");
 
-        // Player creates an answer key
         vm.prank(player1);
-        game.createAnswerKey("What is 2 + 2?", true);
-
-        // Attempt to create another answer key
-        vm.prank(player1);
-        vm.expectRevert("You have already created 1 answer key.");
-        game.createAnswerKey("What is 3 + 3?", false);
+        vm.expectRevert("You cannot answer your own question.");
+        game.guessAnswer(1, "4");
     }
 
-    function testHasEachPlayerCreatedAnswersKey() public {
-        // Player 1 signs up and creates an answer key
+    function test_CannotGuessQuestionTwice() public {
+        // Player 1 signs up
         vm.prank(player1);
-        game.signUp();
-        vm.prank(player1);
-        game.createAnswerKey("What is 2 + 2?", true);
+        game.signUp("Question 1", "Answer 1");
 
         // Player 2 signs up
         vm.prank(player2);
-        game.signUp();
+        game.signUp("Question 2", "Answer 2");
 
-        // Admin checks if each player has created an answer key
-        vm.prank(admin);
-        assertFalse(
-            game.hasEachPlayerCreatedAnswersKey(),
-            "Not all players have created an answer key."
-        );
-
-        // Player 2 creates an answer key
+        // Player 2 guesses Player 1's question
         vm.prank(player2);
-        game.createAnswerKey("Am I a robot?", true);
+        game.guessAnswer(1, "Answer 1");
 
-        // Check again after disabling sign-up
-        vm.prank(admin);
-        assertTrue(
-            game.hasEachPlayerCreatedAnswersKey(),
-            "All players should have created an answer key."
-        );
+        // Player 2 tries to guess the same question again
+        vm.prank(player2);
+        vm.expectRevert("You have already answered this question.");
+        game.guessAnswer(1, "Answer 1");
+    }
+
+    function test_CannotGuessInvalidQuestion() public {
+        // Player 1 signs up
+        vm.prank(player1);
+        game.signUp("Question 1", "Answer 1");
+
+        // Try to guess non-existent question
+        vm.prank(player1);
+        vm.expectRevert("Invalid question ID.");
+        game.guessAnswer(999, "Any answer");
+    }
+
+    function test_NonPlayerCannotGuess() public {
+        // Player 1 signs up
+        vm.prank(player1);
+        game.signUp("Question 1", "Answer 1");
+
+        // Non-player tries to guess
+        vm.prank(player3);
+        vm.expectRevert("You must be a signed up player to call this function.");
+        game.guessAnswer(1, "Answer 1");
+    }
+
+    function test_MultiplePlayersAndGuesses() public {
+        // Set up three players
+        vm.prank(player1);
+        game.signUp("Q1", "A1");
+
+        vm.prank(player2);
+        game.signUp("Q2", "A2");
+
+        vm.prank(player3);
+        game.signUp("Q3", "A3");
+
+        // Players guess each other's questions
+        vm.prank(player2);
+        game.guessAnswer(1, "A1"); // Correct
+
+        vm.prank(player3);
+        game.guessAnswer(1, "Wrong"); // Incorrect
+
+        vm.prank(player1);
+        game.guessAnswer(2, "A2"); // Correct
+
+        // Check final points
+        (,,, uint256 points1) = game.addressToPlayerProfile(player1);
+        (,,, uint256 points2) = game.addressToPlayerProfile(player2);
+        (,,, uint256 points3) = game.addressToPlayerProfile(player3);
+
+        assertEq(points1, 1);
+        assertEq(points2, 1);
+        assertEq(points3, 0);
     }
 }

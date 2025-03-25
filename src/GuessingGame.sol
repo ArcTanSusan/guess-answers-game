@@ -1,19 +1,29 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-contract GuessingGame {
-    address[] public playersList;
+// This will contain player profile information and question information.
+struct PlayerProfile {
+    uint256 playerId;
+    string question;
+    bytes32 answer;
+    uint256 totalPoints;
+}
 
-    mapping(address => bool) public playersMap;
-    mapping(address playerId => uint256 questionId) public playerIdToQuestionId;
-    mapping(string question => uint256 questionId) public questionToQuestionId;
-    mapping(uint256 questionId => mapping(string question => bool answer))
-        public questionIdToAnswer;
-    // Track whether a player has created a question
-    mapping(address => bool) public playerHasCreatedQuestion;
+contract GuessingGame {
+    bool public isSignUpEnabled = true;
+
+    address[] public playerAddresses;
+
+    mapping(address => PlayerProfile) public addressToPlayerProfile;
+    mapping(uint256 => PlayerProfile) public questionIdToQuestion;
+
+    mapping(uint256 => mapping(uint256 => bool)) public playerIdToQuestionIdToIsAnswered;
+
+    // Track player points
+    mapping(address => uint256) public playerIdToPoints;
+
     // Address of contract owner or admin AKA the game host.
     address public admin;
-    bool public isSignUpEnabled = true;
 
     constructor(address _admin) {
         admin = _admin;
@@ -29,22 +39,34 @@ contract GuessingGame {
 
     modifier playerOnly() {
         require(
-            playersMap[msg.sender],
+            addressToPlayerProfile[msg.sender].playerId != 0,
             "You must be a signed up player to call this function."
         );
         _;
     }
 
-    function getPlayersCount() public view returns (uint256) {
-        return playersList.length;
-    }
-
-    function signUp() public {
+    // Sign up can include your own answer, question. 
+    function signUp(string calldata questionString, string memory answer) public {
         require(isSignUpEnabled, "Sign-up is disabled.");
-        if (!playersMap[msg.sender]) {
-            playersList.push(msg.sender);
-            playersMap[msg.sender] = true;
-        }
+        
+        // Check if player is already signed up using the mapping
+        require(addressToPlayerProfile[msg.sender].playerId == 0, "You are already signed up.");
+        
+        // Create a new player profile
+        uint256 playerId = playerAddresses.length + 1;
+        PlayerProfile memory newProfile = PlayerProfile({
+            playerId: playerId, // Start from 1 so 0 means not registered
+            question: questionString,
+            answer: keccak256(abi.encodePacked(answer)),
+            totalPoints: 0
+        });
+        
+        // Store the profile
+        addressToPlayerProfile[msg.sender] = newProfile;
+        questionIdToQuestion[playerId] = newProfile;
+        playerAddresses.push(msg.sender);
+        
+        // TODO: Emit Event for Player Sign Up
     }
 
     function disableSignUp() public adminOnly {
@@ -52,51 +74,28 @@ contract GuessingGame {
         isSignUpEnabled = false;
     }
 
-    function createAnswerKey(
-        string calldata question,
-        bool answer
-    ) public playerOnly {
-        // Functionality to create answers key. Only 1 player can create only 1 question maximum!
-        // Check that the same player is not creating more than 1 question.
-        require(
-            !playerHasCreatedQuestion[msg.sender],
-            "You have already created 1 answer key."
-        );
-        require(
-            playersList.length > 0,
-            "No players available to assign questionId."
-        );
-        uint256 questionId;
-        bool found = false;
+    function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly {
+        // Check for valid question
+        require(questionIdToQuestion[questionId].playerId != 0, "Invalid question ID.");
 
-        for (uint256 i = 0; i < playersList.length; i++) {
-            if (playersList[i] == msg.sender) {
-                questionId = i; // Assign the index as questionId. This only works for 1 player creating only 1 question.
-                found = true;
-                break;
-            }
-        }
-        require(found, "Player not found in playersList."); // Ensure the player is in the list
-        questionToQuestionId[question] = questionId;
-        playerIdToQuestionId[msg.sender] = questionId;
-        questionIdToAnswer[questionId][question] = answer;
-        playerHasCreatedQuestion[msg.sender] = true;
-    }
+        // Check that player has not already answered this question
+        require(playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] == false, "You have already answered this question.");
+        
+        // Check that msg.sender is not answering his own question
+        require(questionIdToQuestion[questionId].playerId != addressToPlayerProfile[msg.sender].playerId, "You cannot answer your own question.");
 
-    function hasEachPlayerCreatedAnswersKey()
-        public
-        view
-        adminOnly
-        returns (bool)
-    {
-        // Only the admin can check if all players have created answers key
-        // Check if all players have created an answer key
-        uint256 playersCount = playersList.length;
-        for (uint256 i = 0; i < playersCount; i++) {
-            if (!playerHasCreatedQuestion[playersList[i]]) {
-                return false; // If any player hasn't created an answer key, return false
-            }
+        // Answer question
+        bytes32 guessedAnswerHash = keccak256(abi.encodePacked(guessedAnswer));
+        bool isCorrectAnswer = questionIdToQuestion[questionId].answer == guessedAnswerHash;
+
+        // Mark question as answered by user? 
+        playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] = true;
+
+        // Increment the points. 
+        if (isCorrectAnswer) {
+            addressToPlayerProfile[msg.sender].totalPoints += 1;
         }
-        return true; // All players have created an answer key
+
+        // TODO: Emit Event for Player Guessing
     }
 }
