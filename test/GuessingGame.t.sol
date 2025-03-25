@@ -23,12 +23,12 @@ contract GuessingGameTest is Test {
 
     function test_OnlyAdminCanDisableSignUp() public {
         assertTrue(game.isSignUpEnabled());
-        
+
         // Non-admin cannot disable signup
         vm.prank(player1);
         vm.expectRevert("Only the game host or admin can call this function.");
         game.disableSignUp();
-        
+
         // Admin can disable signup
         vm.prank(admin);
         game.disableSignUp();
@@ -40,7 +40,7 @@ contract GuessingGameTest is Test {
         vm.prank(player1);
         game.signUp("What is 2+2?", "4");
 
-        (uint256 playerId, string memory question, bytes32 answer, uint256 points) = 
+        (uint256 playerId, string memory question, bytes32 answer, uint256 points) =
             game.addressToPlayerProfile(player1);
 
         assertEq(playerId, 1);
@@ -53,7 +53,7 @@ contract GuessingGameTest is Test {
     function test_CannotSignUpTwice() public {
         vm.startPrank(player1);
         game.signUp("Question 1", "Answer 1");
-        
+
         vm.expectRevert("You are already signed up.");
         game.signUp("Question 2", "Answer 2");
         vm.stopPrank();
@@ -71,7 +71,7 @@ contract GuessingGameTest is Test {
     // Guessing Tests
     function testFuzz_CorrectGuess(string memory question, string memory answer) public {
         vm.assume(bytes(question).length > 0 && bytes(answer).length > 0);
-        
+
         // Player 1 signs up and creates question
         vm.prank(player1);
         game.signUp(question, answer);

@@ -30,28 +30,24 @@ contract GuessingGame {
     }
 
     modifier adminOnly() {
-        require(
-            msg.sender == admin,
-            "Only the game host or admin can call this function."
-        );
+        require(msg.sender == admin, "Only the game host or admin can call this function.");
         _;
     }
 
     modifier playerOnly() {
         require(
-            addressToPlayerProfile[msg.sender].playerId != 0,
-            "You must be a signed up player to call this function."
+            addressToPlayerProfile[msg.sender].playerId != 0, "You must be a signed up player to call this function."
         );
         _;
     }
 
-    // Sign up can include your own answer, question. 
+    // Sign up can include your own answer, question.
     function signUp(string calldata questionString, string memory answer) public {
         require(isSignUpEnabled, "Sign-up is disabled.");
-        
+
         // Check if player is already signed up using the mapping
         require(addressToPlayerProfile[msg.sender].playerId == 0, "You are already signed up.");
-        
+
         // Create a new player profile
         uint256 playerId = playerAddresses.length + 1;
         PlayerProfile memory newProfile = PlayerProfile({
@@ -60,12 +56,12 @@ contract GuessingGame {
             answer: keccak256(abi.encodePacked(answer)),
             totalPoints: 0
         });
-        
+
         // Store the profile
         addressToPlayerProfile[msg.sender] = newProfile;
         questionIdToQuestion[playerId] = newProfile;
         playerAddresses.push(msg.sender);
-        
+
         // TODO: Emit Event for Player Sign Up
     }
 
@@ -79,19 +75,25 @@ contract GuessingGame {
         require(questionIdToQuestion[questionId].playerId != 0, "Invalid question ID.");
 
         // Check that player has not already answered this question
-        require(playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] == false, "You have already answered this question.");
-        
+        require(
+            playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] == false,
+            "You have already answered this question."
+        );
+
         // Check that msg.sender is not answering his own question
-        require(questionIdToQuestion[questionId].playerId != addressToPlayerProfile[msg.sender].playerId, "You cannot answer your own question.");
+        require(
+            questionIdToQuestion[questionId].playerId != addressToPlayerProfile[msg.sender].playerId,
+            "You cannot answer your own question."
+        );
 
         // Answer question
         bytes32 guessedAnswerHash = keccak256(abi.encodePacked(guessedAnswer));
         bool isCorrectAnswer = questionIdToQuestion[questionId].answer == guessedAnswerHash;
 
-        // Mark question as answered by user? 
+        // Mark question as answered by user?
         playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] = true;
 
-        // Increment the points. 
+        // Increment the points.
         if (isCorrectAnswer) {
             addressToPlayerProfile[msg.sender].totalPoints += 1;
         }
