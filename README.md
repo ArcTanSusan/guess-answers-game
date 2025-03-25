@@ -1,19 +1,25 @@
-## Foundry
+# Final project Advanced Solidity Bootcamp Q1 2025 - Group 2
+Team members:
+- Susan Tan @ArcTanSusan
+- Diego Lievano @Lievanov
+- Rodrigo Reyes @kouryuu
+- Rastaar Haghi @hrastaar
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Game Overview
+### Round 0: Sign-Up
+Players join the game by signing up. Each player can only sign up once.
 
-Foundry consists of:
+### Round 1: Create Questions & Answers
+The admin locks sign-ups and starts the game. Each player submits one unique question along with the correct answer.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+### Round 2: Guessing Phase
+Players take turns guessing the correct answers to the questions submitted by other players. Points are awarded for correct guesses.
 
-## Documentation
+### Round 3: Winners & Reset
+The player with the most points wins the game. The admin distributes the prize money and resets the game for the next round.
 
-https://book.getfoundry.sh/
 
-## Usage
+## Installation
 
 ### Build
 
@@ -21,7 +27,7 @@ https://book.getfoundry.sh/
 $ forge build
 ```
 
-### Test
+### Testing
 
 ```shell
 $ forge test
@@ -37,30 +43,4 @@ $ forge fmt
 
 ```shell
 $ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
 ```
