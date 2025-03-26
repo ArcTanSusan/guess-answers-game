@@ -25,6 +25,8 @@ contract GuessingGame {
     // Address of contract owner or admin AKA the game host.
     address public admin;
 
+    uint256 private MINIMUM_BET = 100 gwei;
+
     constructor(address _admin) {
         admin = _admin;
     }
@@ -39,6 +41,15 @@ contract GuessingGame {
             addressToPlayerProfile[msg.sender].playerId != 0, "You must be a signed up player to call this function."
         );
         _;
+    }
+
+    // Set and get minimum bet
+    function setMinimumBet(uint256 _min) public adminOnly {
+        MINIMUM_BET = _min;
+    }
+
+    function getMinimumBet() public view returns (uint256) {
+        return MINIMUM_BET;
     }
 
     // Sign up can include your own answer, question.
@@ -85,19 +96,38 @@ contract GuessingGame {
             questionIdToQuestion[questionId].playerId != addressToPlayerProfile[msg.sender].playerId,
             "You cannot answer your own question."
         );
-
+        require(msg.value >= MINIMUM_BET, "Below Minimum");
         // Answer question
         bytes32 guessedAnswerHash = keccak256(abi.encodePacked(guessedAnswer));
         bool isCorrectAnswer = questionIdToQuestion[questionId].answer == guessedAnswerHash;
 
-        // Mark question as answered by user?
+        // Mark question as answered by user
         playerIdToQuestionIdToIsAnswered[addressToPlayerProfile[msg.sender].playerId][questionId] = true;
 
-        // Increment the points.
+        // If answer is correct, award points
         if (isCorrectAnswer) {
-            addressToPlayerProfile[msg.sender].totalPoints += 1;
+            addressToPlayerProfile[msg.sender].totalPoints++;
         }
 
         // TODO: Emit Event for Player Guessing
+    }
+
+    /// @notice Distributes winnings based on the total points
+    function distributeWinnings() public adminOnly {
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            PlayerProfile memory playerProfile = addressToPlayerProfile[playerAddress];
+            uint256 amount = playerProfile.totalPoints * MINIMUM_BET;
+            payable(playerAddress).transfer(amount);
+        }
+
+        // resets everything
+        isSignUpEnabled = true;
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            delete addressToPlayerProfile[playerAddress];
+            delete questionIdToQuestion[i + 1];
+            delete playerIdToPoints[playerAddress];
+        }
     }
 }
