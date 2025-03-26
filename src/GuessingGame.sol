@@ -42,11 +42,14 @@ contract GuessingGame {
     }
 
     // Sign up can include your own answer, question.
-    function signUp(string calldata questionString, string memory answer) public {
+    function signUp(string calldata questionString, string memory answer) public payable {
         require(isSignUpEnabled, "Sign-up is disabled.");
 
         // Check if player is already signed up using the mapping
         require(addressToPlayerProfile[msg.sender].playerId == 0, "You are already signed up.");
+
+        // Check if player has enough balance to sign up
+        require(msg.value >= 0.01 ether, "You must pay at least 0.01 ether to sign up.");
 
         // Create a new player profile
         uint256 playerId = playerAddresses.length + 1;
@@ -99,5 +102,62 @@ contract GuessingGame {
         }
 
         // TODO: Emit Event for Player Guessing
+    }
+
+    function distributeCash() public adminOnly {
+        require(!isSignUpEnabled, "Game must be ended before distributing prize");
+        require(playerAddresses.length > 0, "No players in the game");
+
+        // Find player with highest points
+        address winnerAddress = playerAddresses[0];
+        uint256 highestPoints = addressToPlayerProfile[winnerAddress].totalPoints;
+
+        for (uint256 i = 1; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            uint256 playerPoints = addressToPlayerProfile[playerAddress].totalPoints;
+
+            if (playerPoints > highestPoints) {
+                highestPoints = playerPoints;
+                winnerAddress = playerAddress;
+            }
+        }
+
+        // Get contract balance
+        uint256 prizePool = address(this).balance;
+        require(prizePool > 0, "No funds to distribute");
+
+        // Transfer all funds to winner
+        (bool success,) = payable(winnerAddress).call{value: prizePool}("");
+        require(success, "Failed to send prize to winner");
+    }
+
+    function resetGame() public adminOnly {
+        require(!isSignUpEnabled, "Must end game before resetting");
+
+        // Clear all mappings by iterating through player addresses
+        for (uint256 i = 1; i <= playerAddresses.length; i++) {
+            // Clear question mapping
+            delete questionIdToQuestion[i];
+
+            // Clear player answered questions mapping
+            for (uint256 j = 1; j <= playerAddresses.length; j++) {
+                delete playerIdToQuestionIdToIsAnswered[i][j];
+            }
+        }
+
+        // Clear player profiles and points
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            delete addressToPlayerProfile[playerAddress];
+            delete playerIdToPoints[playerAddress];
+        }
+
+        // Clear all player addresses
+        while (playerAddresses.length > 0) {
+            playerAddresses.pop();
+        }
+
+        // Re-enable signups for new game
+        isSignUpEnabled = true;
     }
 }
