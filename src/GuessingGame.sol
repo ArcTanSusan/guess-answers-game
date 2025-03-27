@@ -11,9 +11,8 @@ struct PlayerProfile {
 
 contract GuessingGame {
     bool public isSignUpEnabled = true;
-
-    // Add reentrancy guard
     bool private _locked;
+    bool public paused = false;
 
     address[] public playerAddresses;
 
@@ -34,6 +33,7 @@ contract GuessingGame {
     event GameEnded(bool signUpDisabled);
     event PrizeDistributed(address indexed winner, uint256 amount);
     event GameReset();
+    event EmergencyPause(bool isPaused);
 
     constructor(address _admin) {
         admin = _admin;
@@ -59,8 +59,19 @@ contract GuessingGame {
         _;
     }
 
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
+    // Emergency pause function
+    function togglePause() public adminOnly {
+        paused = !paused;
+        emit EmergencyPause(paused);
+    }
+
     // Sign up can include your own answer, question.
-    function signUp(string calldata questionString, string memory answer) public payable {
+    function signUp(string calldata questionString, string memory answer) public payable whenNotPaused {
         require(isSignUpEnabled, "Sign-up is disabled.");
 
         // Check if player is already signed up using the mapping
@@ -87,13 +98,13 @@ contract GuessingGame {
         emit PlayerSignedUp(msg.sender, playerId, questionString);
     }
 
-    function disableSignUp() public adminOnly {
+    function disableSignUp() public adminOnly whenNotPaused {
         // Functionality to disable sign-up process
         isSignUpEnabled = false;
         emit GameEnded(true);
     }
 
-    function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly {
+    function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly whenNotPaused {
         // Check for valid question
         require(questionIdToQuestion[questionId].playerId != 0, "Invalid question ID.");
 
@@ -125,7 +136,7 @@ contract GuessingGame {
         emit AnswerGuessed(msg.sender, questionId, isCorrectAnswer);
     }
 
-    function distributeCash() public nonReentrant adminOnly {
+    function distributeCash() public nonReentrant adminOnly whenNotPaused {
         require(!isSignUpEnabled, "Game must be ended before distributing prize");
         require(playerAddresses.length > 0, "No players in the game");
 
@@ -154,7 +165,7 @@ contract GuessingGame {
         emit PrizeDistributed(winnerAddress, prizePool);
     }
 
-    function resetGame() public adminOnly {
+    function resetGame() public adminOnly whenNotPaused {
         require(!isSignUpEnabled, "Must end game before resetting");
 
         // Clear player profiles, questions, and points
