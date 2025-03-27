@@ -134,29 +134,25 @@ contract GuessingGame {
     function resetGame() public adminOnly {
         require(!isSignUpEnabled, "Must end game before resetting");
 
-        // Clear all mappings by iterating through player addresses
-        for (uint256 i = 1; i <= playerAddresses.length; i++) {
-            // Clear question mapping
-            delete questionIdToQuestion[i];
-
-            // Clear player answered questions mapping
-            for (uint256 j = 1; j <= playerAddresses.length; j++) {
-                delete playerIdToQuestionIdToIsAnswered[i][j];
-            }
-        }
-
-        // Clear player profiles and points
+        // Clear player profiles, questions, and points
         for (uint256 i = 0; i < playerAddresses.length; i++) {
             address playerAddress = playerAddresses[i];
+            uint256 playerId = addressToPlayerProfile[playerAddress].playerId;
+            
             delete addressToPlayerProfile[playerAddress];
+            
+            delete questionIdToQuestion[i + 1];
+            
             delete playerIdToPoints[playerAddress];
+            
+            for (uint256 j = 1; j <= playerAddresses.length; j++) {
+                delete playerIdToQuestionIdToIsAnswered[playerId][j];
+            }
         }
-
+        
         // Clear all player addresses
-        while (playerAddresses.length > 0) {
-            playerAddresses.pop();
-        }
-
+        delete playerAddresses;
+        
         // Re-enable signups for new game
         isSignUpEnabled = true;
     }
