@@ -11,6 +11,8 @@ struct PlayerProfile {
 
 contract GuessingGame {
     bool public isSignUpEnabled = true;
+    bool private _locked;
+    bool public paused = false;
 
     address[] public playerAddresses;
 
@@ -25,8 +27,24 @@ contract GuessingGame {
     // Address of contract owner or admin AKA the game host.
     address public admin;
 
+    // Events
+    event PlayerSignedUp(address indexed player, uint256 indexed playerId, string question);
+    event AnswerGuessed(address indexed player, uint256 indexed questionId, bool correct);
+    event GameEnded(bool signUpDisabled);
+    event PrizeDistributed(address indexed winner, uint256 amount);
+    event GameReset();
+    event EmergencyPause(bool isPaused);
+
     constructor(address _admin) {
         admin = _admin;
+    }
+
+    // Add reentrancy guard modifier
+    modifier nonReentrant() {
+        require(!_locked, "ReentrancyGuard: reentrant call");
+        _locked = true;
+        _;
+        _locked = false;
     }
 
     modifier adminOnly() {
@@ -41,8 +59,19 @@ contract GuessingGame {
         _;
     }
 
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
+    // Emergency pause function
+    function togglePause() public adminOnly {
+        paused = !paused;
+        emit EmergencyPause(paused);
+    }
+
     // Sign up can include your own answer, question.
-    function signUp(string calldata questionString, string memory answer) public payable {
+    function signUp(string calldata questionString, string memory answer) public payable whenNotPaused {
         require(isSignUpEnabled, "Sign-up is disabled.");
 
         // Check if player is already signed up using the mapping
@@ -65,15 +94,17 @@ contract GuessingGame {
         questionIdToQuestion[playerId] = newProfile;
         playerAddresses.push(msg.sender);
 
-        // TODO: Emit Event for Player Sign Up
+        // Emit event for player sign up
+        emit PlayerSignedUp(msg.sender, playerId, questionString);
     }
 
-    function disableSignUp() public adminOnly {
+    function disableSignUp() public adminOnly whenNotPaused {
         // Functionality to disable sign-up process
         isSignUpEnabled = false;
+        emit GameEnded(true);
     }
 
-    function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly {
+    function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly whenNotPaused {
         // Check for valid question
         require(questionIdToQuestion[questionId].playerId != 0, "Invalid question ID.");
 
@@ -101,10 +132,11 @@ contract GuessingGame {
             addressToPlayerProfile[msg.sender].totalPoints += 1;
         }
 
-        // TODO: Emit Event for Player Guessing
+        // Emit event for player guessing
+        emit AnswerGuessed(msg.sender, questionId, isCorrectAnswer);
     }
 
-    function distributeCash() public adminOnly {
+    function distributeCash() public nonReentrant adminOnly whenNotPaused {
         require(!isSignUpEnabled, "Game must be ended before distributing prize");
         require(playerAddresses.length > 0, "No players in the game");
 
@@ -126,38 +158,50 @@ contract GuessingGame {
         uint256 prizePool = address(this).balance;
         require(prizePool > 0, "No funds to distribute");
 
-        // Transfer all funds to winner
-        (bool success,) = payable(winnerAddress).call{value: prizePool}("");
-        require(success, "Failed to send prize to winner");
+        // Apply checks-effects-interactions pattern
+        payable(winnerAddress).transfer(prizePool);
+
+        // Emit event for prize distribution
+        emit PrizeDistributed(winnerAddress, prizePool);
     }
 
-    function resetGame() public adminOnly {
+    function resetGame() public adminOnly whenNotPaused {
         require(!isSignUpEnabled, "Must end game before resetting");
 
-        // Clear all mappings by iterating through player addresses
-        for (uint256 i = 1; i <= playerAddresses.length; i++) {
-            // Clear question mapping
-            delete questionIdToQuestion[i];
+        // Clear player profiles, questions, and points
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            uint256 playerId = addressToPlayerProfile[playerAddress].playerId;
 
-            // Clear player answered questions mapping
+            delete addressToPlayerProfile[playerAddress];
+
+            delete questionIdToQuestion[i + 1];
+
+            delete playerIdToPoints[playerAddress];
+
             for (uint256 j = 1; j <= playerAddresses.length; j++) {
-                delete playerIdToQuestionIdToIsAnswered[i][j];
+                delete playerIdToQuestionIdToIsAnswered[playerId][j];
             }
         }
 
-        // Clear player profiles and points
-        for (uint256 i = 0; i < playerAddresses.length; i++) {
-            address playerAddress = playerAddresses[i];
-            delete addressToPlayerProfile[playerAddress];
-            delete playerIdToPoints[playerAddress];
-        }
-
         // Clear all player addresses
-        while (playerAddresses.length > 0) {
-            playerAddresses.pop();
-        }
+        delete playerAddresses;
 
         // Re-enable signups for new game
         isSignUpEnabled = true;
+
+        // Emit event for game reset
+        emit GameReset();
+    }
+    // Fallback function for receive
+    // Reject direct ETH transfers
+
+    receive() external payable {
+        revert("Direct ETH transfers not allowed.");
+    }
+
+    // Also reject fallback calls with ETH
+    fallback() external payable {
+        revert("Direct ETH transfers not allowed.");
     }
 }
