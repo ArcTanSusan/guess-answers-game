@@ -407,117 +407,117 @@ contract GuessingGameTest is Test {
     function test_PauseAndUnpause() public {
         // Initially not paused
         assertFalse(game.paused());
-        
+
         // Non-admin cannot pause
         vm.prank(player1);
         vm.expectRevert("Only the game host or admin can call this function.");
         game.togglePause();
-        
+
         // Admin can pause
         vm.prank(admin);
         game.togglePause();
         assertTrue(game.paused());
-        
+
         // Admin can unpause
         vm.prank(admin);
         game.togglePause();
         assertFalse(game.paused());
     }
-    
+
     function test_CannotSignUpWhenPaused() public {
         // Pause the game
         vm.prank(admin);
         game.togglePause();
-        
+
         // Try to sign up
         vm.deal(player1, 1 ether);
         vm.prank(player1);
         vm.expectRevert("Contract is paused");
         game.signUp{value: 0.01 ether}("Question", "Answer");
     }
-    
+
     function test_CannotGuessWhenPaused() public {
         // Setup
         vm.deal(player1, 1 ether);
         vm.deal(player2, 1 ether);
-        
+
         vm.prank(player1);
         game.signUp{value: 0.01 ether}("Q1", "A1");
-        
+
         vm.prank(player2);
         game.signUp{value: 0.01 ether}("Q2", "A2");
-        
+
         // Pause the game
         vm.prank(admin);
         game.togglePause();
-        
+
         // Try to guess
         vm.prank(player2);
         vm.expectRevert("Contract is paused");
         game.guessAnswer(1, "A1");
     }
-    
+
     function test_CannotDistributeCashWhenPaused() public {
         // Setup
         vm.deal(player1, 1 ether);
         vm.prank(player1);
         game.signUp{value: 0.01 ether}("Q1", "A1");
-        
+
         vm.prank(admin);
         game.disableSignUp();
-        
+
         // Pause the game
         vm.prank(admin);
         game.togglePause();
-        
+
         // Try to distribute cash
         vm.prank(admin);
         vm.expectRevert("Contract is paused");
         game.distributeCash();
     }
-    
+
     function test_PauseBlocksAllFunctions() public {
         // This test verifies that all functions with the whenNotPaused modifier are blocked when paused
-        
+
         // Setup
         vm.deal(player1, 0.01 ether);
-        
+
         // Pause the contract
         vm.prank(admin);
         game.togglePause();
         assertTrue(game.paused(), "Contract should be paused");
-        
+
         // Try to call each function with whenNotPaused modifier
-        
+
         // 1. signUp
         vm.prank(player1);
         vm.expectRevert("Contract is paused");
         game.signUp{value: 0.01 ether}("Q1", "A1");
-        
+
         // 2. disableSignUp
         vm.prank(admin);
         vm.expectRevert("Contract is paused");
         game.disableSignUp();
-        
+
         // 3. guessAnswer (need to set up first)
         vm.prank(admin);
         game.togglePause(); // Unpause temporarily
-        
+
         vm.prank(player1);
         game.signUp{value: 0.01 ether}("Q1", "A1");
-        
+
         vm.prank(admin);
         game.togglePause(); // Pause again
-        
+
         vm.prank(player1);
         vm.expectRevert("Contract is paused");
         game.guessAnswer(1, "A1");
-        
+
         // 4. distributeCash
         vm.prank(admin);
         vm.expectRevert("Contract is paused");
         game.distributeCash();
-        
+
         // 5. resetGame
         vm.prank(admin);
         vm.expectRevert("Contract is paused");

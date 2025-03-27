@@ -160,7 +160,7 @@ contract GuessingGame {
 
         // Apply checks-effects-interactions pattern
         payable(winnerAddress).transfer(prizePool);
-        
+
         // Emit event for prize distribution
         emit PrizeDistributed(winnerAddress, prizePool);
     }
@@ -172,24 +172,24 @@ contract GuessingGame {
         for (uint256 i = 0; i < playerAddresses.length; i++) {
             address playerAddress = playerAddresses[i];
             uint256 playerId = addressToPlayerProfile[playerAddress].playerId;
-            
+
             delete addressToPlayerProfile[playerAddress];
-            
+
             delete questionIdToQuestion[i + 1];
-            
+
             delete playerIdToPoints[playerAddress];
-            
+
             for (uint256 j = 1; j <= playerAddresses.length; j++) {
                 delete playerIdToQuestionIdToIsAnswered[playerId][j];
             }
         }
-        
+
         // Clear all player addresses
         delete playerAddresses;
-        
+
         // Re-enable signups for new game
         isSignUpEnabled = true;
-        
+
         // Emit event for game reset
         emit GameReset();
     }
