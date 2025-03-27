@@ -193,12 +193,13 @@ contract GuessingGame {
         // Emit event for game reset
         emit GameReset();
     }
-    // Fallback function for receive 
+    // Fallback function for receive
     // Reject direct ETH transfers
+
     receive() external payable {
         revert("Direct ETH transfers not allowed.");
     }
-    
+
     // Also reject fallback calls with ETH
     fallback() external payable {
         revert("Direct ETH transfers not allowed.");
