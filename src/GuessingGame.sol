@@ -12,6 +12,9 @@ struct PlayerProfile {
 contract GuessingGame {
     bool public isSignUpEnabled = true;
 
+    // Add reentrancy guard
+    bool private _locked;
+
     address[] public playerAddresses;
 
     mapping(address => PlayerProfile) public addressToPlayerProfile;
@@ -25,8 +28,23 @@ contract GuessingGame {
     // Address of contract owner or admin AKA the game host.
     address public admin;
 
+    // Events
+    event PlayerSignedUp(address indexed player, uint256 indexed playerId, string question);
+    event AnswerGuessed(address indexed player, uint256 indexed questionId, bool correct);
+    event GameEnded(bool signUpDisabled);
+    event PrizeDistributed(address indexed winner, uint256 amount);
+    event GameReset();
+
     constructor(address _admin) {
         admin = _admin;
+    }
+
+    // Add reentrancy guard modifier
+    modifier nonReentrant() {
+        require(!_locked, "ReentrancyGuard: reentrant call");
+        _locked = true;
+        _;
+        _locked = false;
     }
 
     modifier adminOnly() {
@@ -65,12 +83,14 @@ contract GuessingGame {
         questionIdToQuestion[playerId] = newProfile;
         playerAddresses.push(msg.sender);
 
-        // TODO: Emit Event for Player Sign Up
+        // Emit event for player sign up
+        emit PlayerSignedUp(msg.sender, playerId, questionString);
     }
 
     function disableSignUp() public adminOnly {
         // Functionality to disable sign-up process
         isSignUpEnabled = false;
+        emit GameEnded(true);
     }
 
     function guessAnswer(uint256 questionId, string calldata guessedAnswer) public payable playerOnly {
@@ -101,10 +121,11 @@ contract GuessingGame {
             addressToPlayerProfile[msg.sender].totalPoints += 1;
         }
 
-        // TODO: Emit Event for Player Guessing
+        // Emit event for player guessing
+        emit AnswerGuessed(msg.sender, questionId, isCorrectAnswer);
     }
 
-    function distributeCash() public adminOnly {
+    function distributeCash() public nonReentrant adminOnly {
         require(!isSignUpEnabled, "Game must be ended before distributing prize");
         require(playerAddresses.length > 0, "No players in the game");
 
@@ -126,9 +147,11 @@ contract GuessingGame {
         uint256 prizePool = address(this).balance;
         require(prizePool > 0, "No funds to distribute");
 
-        // Transfer all funds to winner
-        (bool success,) = payable(winnerAddress).call{value: prizePool}("");
-        require(success, "Failed to send prize to winner");
+        // Apply checks-effects-interactions pattern
+        payable(winnerAddress).transfer(prizePool);
+        
+        // Emit event for prize distribution
+        emit PrizeDistributed(winnerAddress, prizePool);
     }
 
     function resetGame() public adminOnly {
@@ -155,5 +178,8 @@ contract GuessingGame {
         
         // Re-enable signups for new game
         isSignUpEnabled = true;
+        
+        // Emit event for game reset
+        emit GameReset();
     }
 }
